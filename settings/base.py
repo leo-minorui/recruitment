@@ -33,6 +33,7 @@ ALLOWED_HOSTS = ["*", ]
 # Application definition
 
 INSTALLED_APPS = [
+    'simpleui',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -132,7 +133,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 ### LDAP
 
-LDAP_AUTH_URL = "ldap://10.127.127.97:389"
+LDAP_AUTH_URL = "ldap://127.0.0.1"
 
 LDAP_AUTH_USE_TLS = False
 
@@ -156,8 +157,8 @@ LDAP_AUTH_CLEAN_USER_DATA = "django_python3_ldap.utils.clean_user_data"
 LDAP_AUTH_FORMAT_USERNAME = "django_python3_ldap.utils.format_username_openldap"
 
 
-LDAP_AUTH_CONNECTION_USERNAME = "admin"
-LDAP_AUTH_CONNECTION_PASSWORD = "Sangforsaasops123."
+LDAP_AUTH_CONNECTION_USERNAME = None
+LDAP_AUTH_CONNECTION_PASSWORD = None
 AUTH_LDAP_ALWAYS_UPDATE_USER = True
 AUTHENTICATION_BACKENDS = {"django_python3_ldap.auth.LDAPBackend", 'django.contrib.auth.backends.ModelBackend'}
 

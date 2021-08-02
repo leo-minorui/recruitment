@@ -4,7 +4,10 @@ from django.contrib import admin
 from interview.models import Candidate
 from django.http import HttpResponse
 from datetime import datetime
+import logging
 # Register your models here.
+
+logger = logging.getLogger(__name__)
 
 
 exportable_fields = ('username', 'city', 'phone', 'bachelor_school', 'master_school', 'degree', 'first_result',
@@ -34,6 +37,8 @@ def export_model_as_csv(modeladmin, request, queryset):
             csv_line_values.append(field_value)
         writer.writerow(csv_line_values)
 
+    logger.info('%s exported %s candidate records'% (request.user, len(queryset)))
+
     return response
 
 export_model_as_csv.short_description = u'导出为csv文件'
@@ -57,11 +62,45 @@ class CandidateAdmin(admin.ModelAdmin):
 
     ordering = ('hr_result', 'second_result', 'first_result')
 
+    # 只读字段
+    readonly_fields = ('first_interviewer_user', 'second_interviewer_user',)
+
+    def get_group_names(self, user):
+        group_names = []
+        for g in user.groups.all():
+            group_names.append(g.name)
+        return group_names
+
+    def get_readonly_fields(self, request, obj=None):
+        group_names = self.get_group_names(request.user)
+
+        if 'interviewer' in group_names:
+            logger.info("interviewer is in user's group for %s" % request.user.username)
+            return ('first_interviewer_user', 'second_interviewer_user',)
+        return ()
+
+    list_editable = ('first_interviewer_user', 'second_interviewer_user')
+
+
+    default_list_editable = ('first_interviewer_user', 'second_interviewer_user')
+
+    def get_list_editable(self, request):
+        group_names = self.get_group_names(request.user)
+
+        if request.user.is_superuser or 'hr' in group_names:
+            return self.default_list_editable
+        return ()
+
+    def get_changelist_instance(self, request):
+        self.list_editable = self.get_list_editable(request)
+        return super(CandidateAdmin, self).get_changelist_instance(request)
+
+
     fieldsets = (
         (None, {'fields': ("userid", ("username", "city", "phone"), ("email", "apply_position", "born_address"), ("gender", "candidate_remark"), ("bachelor_school", "master_school", "doctor_school"), ("major", "degree"), ("test_score_of_general_ability", "paper_score"),)}),
         ('第一轮面试记录', {'fields': (("first_score", "first_learning_ability", "first_professional_competency"), "first_advantage", "first_disadvantage", "first_result", "first_recommend_position", "first_interviewer_user", "first_remark",
 )}),
-        ('第二轮专业复试记录', {'fields': (("second_score", "second_learning_ability", "second_professional_competency"), ("second_pursue_of_excellence", "second_communication_ability", "second_pressure_score"), "second_advantage", "second_disadvantage", "second_result", "second_recommend_position", "second_interviewer_user", "second_remark",
+        ('第二轮专业复试记录', {'fields': (("second_score"), ("second_learning_ability", "second_professional_competency"), ("second_pursue_of_excellence", "second_communication_ability", "second_pressure_score"), "second_advantage", "second_disadvantage", "second_result", "second_recommend_position", "second_interviewer_user", "second_remark",
 )}),
         ('HR复试记录', {'fields': ("hr_score", ("hr_responsibility", "hr_communication_ability", "hr_logic_ability"), ("hr_potential", "hr_stability"), "hr_advantage", "hr_disadvantage", "hr_result", "hr_interviewer_user", "hr_remark",
 )})
