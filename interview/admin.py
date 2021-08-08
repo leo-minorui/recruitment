@@ -8,6 +8,9 @@ import logging
 from django.db.models import Q
 from interview import dingtalk
 from interview import candidate_fieldset as cf
+
+from django.utils.safestring import mark_safe
+from jobs.models import Resume
 # Register your models here.
 
 logger = logging.getLogger(__name__)
@@ -73,7 +76,7 @@ class CandidateAdmin(admin.ModelAdmin):
 
     # 可展示属性
     list_display = (
-        "username", "city", "bachelor_school", "first_score", 'first_result', 'first_interviewer_user',
+        "username", "city", "bachelor_school", 'get_resume', "first_score", 'first_result', 'first_interviewer_user',
         'second_result', 'second_interviewer_user', 'hr_score', 'hr_result', 'last_editor'
     )
 
@@ -87,6 +90,17 @@ class CandidateAdmin(admin.ModelAdmin):
 
     # 只读字段
     readonly_fields = ('first_interviewer_user', 'second_interviewer_user',)
+
+    def get_resume(self, obj):
+        if not obj.phone:
+            return ""
+        resumes = Resume.objects.filter(phone=obj.phone)
+        if resumes and len(resumes) > 0:
+            return mark_safe(u'<a href="/resume/%s" target="_blank">%s</a' % (resumes[0].id, "查看简历"))
+        return ""
+
+    get_resume.short_description = '查看简历'
+    get_resume.allow_tags = True
 
     def get_group_names(self, user):
         group_names = []
