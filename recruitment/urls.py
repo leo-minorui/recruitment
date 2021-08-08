@@ -20,7 +20,7 @@ from django.utils.translation import gettext as _
 urlpatterns = [
     path('admin/', admin.site.urls),
     url(r"^", include("jobs.urls")),
-    #path('simpleui/', include('simpleui.urls'))
+    path('accounts/', include('registration.backends.simple.urls')),
 
 ]
 

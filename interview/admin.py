@@ -1,10 +1,13 @@
 import csv
-
+from django.contrib import messages
 from django.contrib import admin
 from interview.models import Candidate
 from django.http import HttpResponse
 from datetime import datetime
 import logging
+from django.db.models import Q
+from interview import dingtalk
+from interview import candidate_fieldset as cf
 # Register your models here.
 
 logger = logging.getLogger(__name__)
@@ -12,6 +15,19 @@ logger = logging.getLogger(__name__)
 
 exportable_fields = ('username', 'city', 'phone', 'bachelor_school', 'master_school', 'degree', 'first_result',
                      'first_interviewer_user', 'second_result', 'second_interviewer_user', 'hr_result', 'hr_score', 'hr_remark', 'hr_interviewer_user')
+
+# 通知一面面试官面试
+
+def notify_interviewer(modeladmin, request, queryset):
+    candidates = ""
+    interviewers = ""
+    for obj in queryset:
+        candidates = obj.username + ";" + candidates
+        interviewers = obj.first_interviewer_user.username + ";" + interviewers
+    dingtalk.send("候选人 %s 进入面试环节，亲爱的面试官，请准备好面试：%s" % (candidates, interviewers))
+    messages.add_message(request, messages.INFO, '已经成功发送面试通知')
+
+notify_interviewer.short_description = u'通知一面面试官'
 
 def export_model_as_csv(modeladmin, request, queryset):
     response = HttpResponse(content_type='text/csv')
@@ -42,11 +58,18 @@ def export_model_as_csv(modeladmin, request, queryset):
     return response
 
 export_model_as_csv.short_description = u'导出为csv文件'
+export_model_as_csv.allowed_permissions = ('export', )
 
+# 候选人管理类
 class CandidateAdmin(admin.ModelAdmin):
     exclude = ('creator', 'created_date', 'modified_date',)
 
-    actions = [export_model_as_csv,]
+    actions = (export_model_as_csv, notify_interviewer, )
+
+    # 当前用户是否有导出权限
+    def has_export_permission(self, request):
+        opts = self.opts
+        return request.user.has_perm('%s.%s' % (opts.app_label, "export"))  # opts.app_label 取得candidate
 
     # 可展示属性
     list_display = (
@@ -96,15 +119,32 @@ class CandidateAdmin(admin.ModelAdmin):
         return super(CandidateAdmin, self).get_changelist_instance(request)
 
 
-    fieldsets = (
-        (None, {'fields': ("userid", ("username", "city", "phone"), ("email", "apply_position", "born_address"), ("gender", "candidate_remark"), ("bachelor_school", "master_school", "doctor_school"), ("major", "degree"), ("test_score_of_general_ability", "paper_score"),)}),
-        ('第一轮面试记录', {'fields': (("first_score", "first_learning_ability", "first_professional_competency"), "first_advantage", "first_disadvantage", "first_result", "first_recommend_position", "first_interviewer_user", "first_remark",
-)}),
-        ('第二轮专业复试记录', {'fields': (("second_score"), ("second_learning_ability", "second_professional_competency"), ("second_pursue_of_excellence", "second_communication_ability", "second_pressure_score"), "second_advantage", "second_disadvantage", "second_result", "second_recommend_position", "second_interviewer_user", "second_remark",
-)}),
-        ('HR复试记录', {'fields': ("hr_score", ("hr_responsibility", "hr_communication_ability", "hr_logic_ability"), ("hr_potential", "hr_stability"), "hr_advantage", "hr_disadvantage", "hr_result", "hr_interviewer_user", "hr_remark",
-)})
-    )
+    # 对于非管理员，非HR，获取自己是一面面试官或者是二面面试官的候选人集合：
+    def get_queryset(self, request):
+        qs = super(CandidateAdmin, self).get_queryset(request)
+
+        group_names = self.get_group_names(request.user)
+        if request.user.is_superuser or 'hr' in group_names:
+            return qs
+        return Candidate.objects.filter(
+            Q(first_interviewer_user=request.user) | Q(second_interviewer_user=request.user)
+        )
+
+
+
+    # 一面面试官仅填写一面反馈，二面面试官可以填写二面反馈
+
+    def get_fieldsets(self, request, obj=None):
+        group_names = self.get_group_names(request.user)
+
+        if 'interviewer' in group_names and obj.first_interviewer_user == request.user:
+            return cf.default_fieldsets_first
+        if 'interviewer' in group_names and obj.second_interviewer_user == request.user:
+            return cf.default_fieldsets_second
+        return cf.default_fieldsets
+
+
+
     # 默认设置成界面登录者
     def save_model(self, request, obj, form, change):
         obj.last_editor = request.user
